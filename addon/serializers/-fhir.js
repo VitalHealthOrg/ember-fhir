@@ -1,6 +1,5 @@
 import { A } from '@ember/array';
 import { guidFor } from '@ember/object/internals';
-import { merge } from '@ember/polyfills';
 import { set, get } from '@ember/object';
 import { capitalize, camelize, dasherize } from '@ember/string';
 import { typeOf, isPresent, isNone, isEmpty } from '@ember/utils';
@@ -21,37 +20,13 @@ function coerceId(id) {
   }
   return '' + id;
 }
-/**
- * @param {Array} resources
- * @returns {Object}
- */
-function mapResourcesToRecordsHash(resources) {
-  let hash = {};
-  resources.forEach((resource) => {
-    // fix reserved names
-    reserved.forEach((property) => {
-      if (resource.hasOwnProperty(property)) {
-        resource[`${property}_`] = resource[property];
-        delete resource[property];
-      }
-    });
-
-    const type = pluralize(dasherize(resource.resourceType));
-    if (isEmpty(get(hash, type))) {
-      set(hash, type, A());
-    }
-
-    hash[type].push(resource);
-  });
-  return hash;
-}
 
 export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
   isNewSerializerAPI: true,
 
   serialize(snapshot, options) {
-    const hash = this._super(snapshot, options),
-      resourceType = capitalize(camelize(get(snapshot, 'modelName')));
+    const hash = this._super(snapshot, options);
+    const resourceType = capitalize(camelize(get(snapshot, 'modelName')));
 
     set(hash, 'resourceType', resourceType);
 
@@ -59,44 +34,75 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
   },
 
   serializeIntoHash(hash, typeClass, snapshot, options) {
-    merge(hash, this.serialize(snapshot, options));
+    Object.assign(hash, this.serialize(snapshot, options));
   },
 
   extractId(modelClass, resourceHash) {
-    return get(resourceHash, 'id') ||
-      guidFor(resourceHash);
+    return get(resourceHash, 'id') || guidFor(resourceHash);
+  },
+  /**
+   * Maps resources returned in a FHIR payload to records as expected in a JSON-API document
+   * @param {Array} resources
+   * @returns {Object} Object containing records
+   */
+  mapResourcesToRecords(resources) {
+    return resources.reduce((acc, resource) => {
+      // fix reserved names
+      reserved.forEach((property) => {
+        if (resource.hasOwnProperty(property)) {
+          resource[`${property}_`] = resource[property];
+          delete resource[property];
+        }
+      });
+
+      const typeName = pluralize(dasherize(resource.resourceType));
+      
+      if (!Array.isArray(acc[typeName])) {
+        acc[typeName] = [];
+      }
+
+      acc[typeName].push(resource);
+      return acc;
+    }, {});
+  },
+  /**
+   * Normalize meta information from reponse
+   * @param {Object} payload 
+   * @returns {Object} meta object of a JSON-API document
+   */
+  normalizeMeta(payload) {
+    let meta = {};
+    if (payload.link) {
+      meta['pagination'] = payload.link.reduce((acc, link) => { 
+        acc[link.relation] = link.url;
+        return acc;
+      }, {});
+    }
+
+    if (payload.total) {
+      meta['total'] = payload.total;
+    }
+    return meta;
   },
 
   normalizeResponse(store, primaryModelClass, payload, id, requestType) {
-    let resourceArray = null,
-      hash = {
-        'meta': {},
-      };
-
-    if (isEmpty(get(payload, 'entry'))) {
+    let resourceArray = null;
+    if (isEmpty(payload.entry)) {
       // This is a query where nothing was returned.
       // Create an empty array in the hash so that subsequent parsing doesn't complain that there are 0 expected objects
       if (payload.total === 0) {
+        let hash = {};
         hash[pluralize(primaryModelClass.modelName)] = [];
         return this._super(store, primaryModelClass, hash, id, requestType);
       } else {
         resourceArray = [ payload ];
       }
     } else {
-      resourceArray = get(payload, 'entry').mapBy('resource');
+      resourceArray = A(payload.entry).mapBy('resource');
     }
 
-    Object.assign(hash, mapResourcesToRecordsHash(resourceArray));
-
-    if (payload.link) {
-      let meta = {};
-      payload.link.forEach(link => { meta[link.relation] = link.url; });
-      hash['meta']['pagination'] = meta;
-    }
-
-    if (payload.total) {
-      hash['meta']['total'] = payload.total;
-    }
+    let hash = this.mapResourcesToRecords(resourceArray);
+    hash.meta = this.normalizeMeta(payload);
 
     return this._super(store, primaryModelClass, hash, id, requestType);
   },
@@ -107,20 +113,19 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
     };
 
     arrayHash.map((hash) => {
-      const resource = get(hash, 'resourceType'),
-        modelClass = store.modelFor(resource),
-        serializer = store.serializerFor(resource),
-        normalizedSerializer = serializer.normalize(modelClass, hash, prop),
-        data = get(normalizedSerializer, 'data');
+      const resource = hash.resourceType;
+      const modelClass = store.modelFor(resource);
+      const serializer = store.serializerFor(resource);
+      const normalizedSerializer = serializer.normalize(modelClass, hash, prop);
 
-      get(documentHash, 'data').push(data);
+      documentHash.data.push(normalizedSerializer.data);
     });
 
     return documentHash;
   },
 
   pushPayload(store, payload) {
-    const transformedPayload = mapResourcesToRecordsHash([payload]);
+    const transformedPayload = this.mapResourcesToRecords([payload]);
     return this._super(store, transformedPayload);
   },
 
@@ -130,7 +135,7 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
     }
 
     if (typeOf(relationshipHash) === 'object') {
-      const id = get(relationshipHash, 'id');
+      const id = relationshipHash.id;
       if (isPresent(id)) {
         set(relationshipHash, 'id', coerceId(id));
       }

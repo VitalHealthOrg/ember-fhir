@@ -3,8 +3,9 @@ import { isPresent, isEqual } from '@ember/utils';
 import { capitalize, camelize } from '@ember/string';
 import DS from 'ember-data';
 import { singularize } from 'ember-inflector';
+import AdapterFetch from 'ember-fetch/mixins/adapter-fetch';
 
-export default DS.RESTAdapter.extend({
+export default DS.RESTAdapter.extend(AdapterFetch, {
   defaultSerializer: '-fhir',
 
   pathForType(type) {
