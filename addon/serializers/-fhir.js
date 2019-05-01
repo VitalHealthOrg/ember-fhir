@@ -80,6 +80,9 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
         hash[pluralize(primaryModelClass.modelName)] = [];
         return this._super(store, primaryModelClass, hash, id, requestType);
       } else {
+        if (payload.total === 0) {
+          hash[pluralize(primaryModelClass.modelName)] = [];
+        }
         resourceArray = [ payload ];
       }
     } else {
