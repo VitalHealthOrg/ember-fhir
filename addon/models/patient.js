@@ -20,7 +20,7 @@ export default DomainResource.extend({
   contact: hasMany('patient-contact', { async: true }),
   animal: belongsTo('patient-animal', { async: false }),
   communication: hasMany('patient-communication', { async: true }),
-  generalPractitioner: hasMany('reference', { async: true }),
-  managingOrganization: belongsTo('reference', { async: false }),
-  link: hasMany('patient-link', { async: true })
+  generalPractitioner: hasMany('practitioner'),
+  managingOrganization: belongsTo('organization'),
+  link: hasMany('patient-link', { async: true }),
 });

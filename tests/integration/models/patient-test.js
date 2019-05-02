@@ -4,7 +4,10 @@ import { setupTest } from 'ember-qunit';
 import Pretender from 'pretender';
 import { example as patient } from '../../stubs/patient';
 import { example as organization } from '../../stubs/organization';
+import { example as practicioner } from '../../stubs/practicioner';
 import Patient from 'ember-fhir/models/patient';
+import Organization from 'ember-fhir/models/organization';
+import Practitioner from 'ember-fhir/models/practitioner';
 
 const requests = {
   '/Patient/example': function() {
@@ -16,6 +19,9 @@ const requests = {
   },
   'http://vonk.fire.ly/Organization/1': function() {
     return [200, { 'Content-Type': 'application/json' }, JSON.stringify(organization)]
+  },
+  '/Practicioner/example': function() {
+    return [200, { 'Content-Type': 'application/json' }, JSON.stringify(practicioner)]
   }
 };
 
@@ -71,6 +77,38 @@ module('Integration | Model | Patient', function(hooks) {
       assert.equal(relationShip.kind, 'hasMany');
       assert.equal(relationShip.key, 'telecom');
       assert.equal(relationShip.type, 'contact-point');
+    });
+
+    test('it maps references to JSON-API "relationships object"', function(assert) {
+      const relationShip = model.relationshipFor('managingOrganization');
+      assert.equal(relationShip.key, 'managingOrganization');
+      assert.equal(relationShip.type, 'organization');
+    });
+  });
+
+  module('query relationShips', function() {
+    let model, store;
+    hooks.beforeEach(function() {
+      store = this.owner.lookup('service:store');
+      return store
+        .findRecord('Patient', 'example')
+        .then(data => (model = data));
+    });
+
+    test('it should be able to query a belongsTo relation with a literal reference', function (assert) {
+      model.get('managingOrganization').then(organization => {
+        assert.ok(organization instanceof Organization);
+        assert.equal(organization.name, 'Laboratoire de charme');
+      });
+    });
+
+    test('it should be able to query a hasMany relation with a literal reference', function (assert) {
+      model.get('generalPractitioner').then(practicioners => {
+        assert.equal(practicioners.length, 1);
+        const practicioner = practicioners.firstObject
+        assert.ok(practicioner instanceof Practitioner);
+        assert.equal(practicioner.id, 'example');
+      });
     });
   });
 });

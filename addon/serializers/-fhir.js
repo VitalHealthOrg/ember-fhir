@@ -95,7 +95,7 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
         hash[pluralize(primaryModelClass.modelName)] = [];
         return this._super(store, primaryModelClass, hash, id, requestType);
       } else {
-        resourceArray = [ payload ];
+        resourceArray = A([ payload ]);
       }
     } else {
       resourceArray = A(payload.entry).mapBy('resource');
@@ -127,6 +127,30 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
   pushPayload(store, payload) {
     const transformedPayload = this.mapResourcesToRecords([payload]);
     return this._super(store, transformedPayload);
+  },
+
+  extractRelationships(modelClass, resourceHash) {
+    //Refences with a literal reference should be transformed to JSON-API links
+    let relationShipsWithLiteralReferences = [];
+    modelClass.eachRelationship((key, relationshipMeta) => {
+      if (relationshipMeta.options.async !== false) {
+        let sourceData = resourceHash[relationshipMeta.key];
+        if (sourceData && sourceData.reference) {
+          delete resourceHash[relationshipMeta.key];
+
+          relationShipsWithLiteralReferences.push({key: relationshipMeta.key, reference: sourceData.reference});
+        }
+      }
+    });
+    const relationShips = this._super(modelClass, resourceHash);
+    relationShipsWithLiteralReferences.forEach((entry) => {
+      relationShips[entry.key] = {
+        links: {
+          related: entry.reference
+        }
+      }
+    });
+    return relationShips;
   },
 
   extractRelationship(relationshipModelName, relationshipHash) {
