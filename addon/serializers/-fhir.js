@@ -91,21 +91,26 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
 
   normalizeResponse(store, primaryModelClass, payload, id, requestType) {
     let resourceArray = null;
+    let modelName = pluralize(primaryModelClass.modelName);
+
     if (isEmpty(payload.entry)) {
       // This is a query where nothing was returned.
       // Create an empty array in the hash so that subsequent parsing doesn't complain that there are 0 expected objects
       if (payload.total === 0) {
-        let hash = {};
-        hash[pluralize(primaryModelClass.modelName)] = [];
-        return this._super(store, primaryModelClass, hash, id, requestType);
+        return this._super(store, primaryModelClass, { [modelName]: [] }, id, requestType);
       } else {
-        resourceArray = A([payload]);
+        resourceArray = [payload];
       }
     } else {
       resourceArray = A(payload.entry).mapBy('resource');
     }
 
     let hash = this.mapResourcesToRecords(resourceArray);
+
+    if (payload.total === 0 && !hash.hasOwnProperty(modelName)) {
+      hash[modelName] = [];
+    }
+
     hash.meta = this.normalizeMeta(payload);
 
     return this._super(store, primaryModelClass, hash, id, requestType);
