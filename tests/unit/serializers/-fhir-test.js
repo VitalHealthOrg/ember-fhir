@@ -2,9 +2,10 @@ import { module, test } from 'qunit';
 import { setupTest } from 'ember-qunit';
 import { run } from '@ember/runloop';
 import { example } from '../../stubs/patient';
-import { example as bundle } from '../../stubs/questionnaire';
-import Patient from 'ember-fhir/models/patient';
+import { example as questionnaire } from '../../stubs/questionnaire';
+import { example as patient } from '../../stubs/patient';
 import Questionnaire from 'ember-fhir/models/questionnaire';
+import Patient from 'ember-fhir/models/patient';
 
 import Service from '@ember/service';
 
@@ -24,13 +25,15 @@ module('Unit | Serializer | -fhir', function(hooks) {
   });
 
   test('#serialize returns record', function(assert) {
-    const record = run(() => this.owner.lookup('service:store').createRecord('Element'));
+    const record = run(() =>
+      this.owner.lookup('service:store').createRecord('Element')
+    );
     const serializeRecord = record.serialize();
 
     assert.ok(serializeRecord);
   });
 
-  test('#pushPayload with FHIR data creates ember models', async function (assert) {
+  test('#pushPayload with FHIR data creates ember models', async function(assert) {
     const store = this.owner.lookup('service:store');
     store.pushPayload('patient', example);
 
@@ -41,19 +44,55 @@ module('Unit | Serializer | -fhir', function(hooks) {
   });
 
   module('normalize to JSON-API document', function() {
-    let resultDocument;
+    let store;
     hooks.beforeEach(function() {
-      const store = this.owner.lookup('service:store');
-      const serializer = store.serializerFor('Questionnaire');
-
-      resultDocument = serializer.normalizeResponse(store, Questionnaire, bundle, 'cf-1531101177536', 'query');  
+      store = this.owner.lookup('service:store');
     });
 
-    // test('should match expected', async function (assert) {
-    //   assert.propEqual(resultDocument, questionnaireJsonApiDocument);
-    // });
+    test('belongsTo references', async function(assert) {
+      const serializer = store.serializerFor('Patient');
+      const resultDocument = serializer.normalizeResponse(
+        store,
+        Patient,
+        patient,
+        null,
+        'findRecord'
+      );
 
-    test('to `data` property', async function (assert) {
+      //Attributes and sync relations should still work
+      assert.equal(resultDocument.data.id, 'example');
+      assert.equal(resultDocument.data.type, 'patient');
+      assert.equal(resultDocument.data.attributes.active, true);
+      assert.ok(Array.isArray(resultDocument.included));
+      assert.equal(resultDocument.included.length, 25);
+
+      assert.equal(resultDocument.data.relationships.name.data.length, 3);
+      assert.equal(
+        resultDocument.data.relationships.name.data[0].type,
+        'human-name'
+      );
+
+      //Absolute references should work
+      assert.deepEqual(resultDocument.data.relationships.managingOrganization, {
+        links: {
+          related: 'http://vonk.fire.ly/Organization/1'
+        },
+        meta: {
+          display: 'Laboratoire de charme'
+        }
+      });
+    });
+
+    test('internal contained resources', async function(assert) {
+      const serializer = store.serializerFor('Questionnaire');
+      const resultDocument = serializer.normalizeResponse(
+        store,
+        Questionnaire,
+        questionnaire,
+        'cf-1531101177536',
+        'query'
+      );
+
       assert.ok(Array.isArray(resultDocument.data));
       assert.equal(resultDocument.data.length, 2);
 
@@ -62,21 +101,18 @@ module('Unit | Serializer | -fhir', function(hooks) {
       assert.equal(firstObject.type, 'questionnaire');
       assert.equal(firstObject.attributes.name, 'Demographics Questionnaire');
       assert.ok(firstObject.relationships.hasOwnProperty('identifier'));
-    });
 
-    test('to `included` property', async function (assert) {
       assert.ok(Array.isArray(resultDocument.included));
       assert.equal(resultDocument.included.length, 65);
-    });
 
-    test('to `meta` property', async function (assert) {
       assert.deepEqual(resultDocument.meta, {
-        "pagination": {
-          "self": "http://hapi.fhir.org/baseDstu3/Questionnaire?_pretty=true",
-          "next": "http://hapi.fhir.org/baseDstu3?_getpages=cf-1531101177536&_getpagesoffset=20&_count=20&_pretty=true&_bundletype=searchset"
+        pagination: {
+          self: 'http://hapi.fhir.org/baseDstu3/Questionnaire?_pretty=true',
+          next:
+            'http://hapi.fhir.org/baseDstu3?_getpages=cf-1531101177536&_getpagesoffset=20&_count=20&_pretty=true&_bundletype=searchset'
         },
-        "total": "2"
-      })
+        total: '2'
+      });
     });
   });
 });

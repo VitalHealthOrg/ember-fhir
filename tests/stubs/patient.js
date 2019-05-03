@@ -147,12 +147,16 @@ export const example = {
     }
   ],
   managingOrganization: {
-    reference: 'http://vonk.fire.ly/Organization/1'
+    reference: 'http://vonk.fire.ly/Organization/1',
+    display: 'Laboratoire de charme'
   },
   generalPractitioner: [
     {
       reference: 'Practitioner/example',
       display:'Dr. William Smith from Acme Hospital'
+    },
+    {
+      reference: 'Practitioner/example-2'
     }
   ]
 };
