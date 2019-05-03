@@ -1,57 +1,19 @@
 import { A } from '@ember/array';
 import { guidFor } from '@ember/object/internals';
-import { merge } from '@ember/polyfills';
 import { set, get } from '@ember/object';
 import { capitalize, camelize, dasherize } from '@ember/string';
-import { typeOf, isPresent, isNone, isEmpty } from '@ember/utils';
+import { isEmpty } from '@ember/utils';
 import DS from 'ember-data';
 import { pluralize } from 'ember-inflector';
 
-const reserved = [ 'data', 'container', 'trigger', 'type' ];
-
-function coerceId(id) {
-  if (id === null || id === undefined || id === '') {
-    return null;
-  }
-  if (typeof id === 'string') {
-    return id;
-  }
-  if (typeof id === 'symbol') {
-    return id.toString();
-  }
-  return '' + id;
-}
-/**
- * @param {Array} resources
- * @returns {Object}
- */
-function mapResourcesToRecordsHash(resources) {
-  let hash = {};
-  resources.forEach((resource) => {
-    // fix reserved names
-    reserved.forEach((property) => {
-      if (resource.hasOwnProperty(property)) {
-        resource[`${property}_`] = resource[property];
-        delete resource[property];
-      }
-    });
-
-    const type = pluralize(dasherize(resource.resourceType));
-    if (isEmpty(get(hash, type))) {
-      set(hash, type, A());
-    }
-
-    hash[type].push(resource);
-  });
-  return hash;
-}
+const reserved = ['data', 'container', 'trigger', 'type'];
 
 export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
   isNewSerializerAPI: true,
 
   serialize(snapshot, options) {
-    const hash = this._super(snapshot, options),
-      resourceType = capitalize(camelize(get(snapshot, 'modelName')));
+    const hash = this._super(snapshot, options);
+    const resourceType = capitalize(camelize(get(snapshot, 'modelName')));
 
     set(hash, 'resourceType', resourceType);
 
@@ -59,47 +21,97 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
   },
 
   serializeIntoHash(hash, typeClass, snapshot, options) {
-    merge(hash, this.serialize(snapshot, options));
+    Object.assign(hash, this.serialize(snapshot, options));
   },
 
   extractId(modelClass, resourceHash) {
-    return get(resourceHash, 'id') ||
-      guidFor(resourceHash);
+    return get(resourceHash, 'id') || guidFor(resourceHash);
   },
-
-  normalizeResponse(store, primaryModelClass, payload, id, requestType) {
-    let resourceArray = null,
-      hash = {
-        'meta': {},
-      };
-
-    if (isEmpty(get(payload, 'entry'))) {
-      // This is a query where nothing was returned.
-      // Create an empty array in the hash so that subsequent parsing doesn't complain that there are 0 expected objects
-      if (payload.total === 0) {
-        hash[pluralize(primaryModelClass.modelName)] = [];
-        return this._super(store, primaryModelClass, hash, id, requestType);
+  renameReservedProperties(resource) {
+    return Object.keys(resource).reduce((acc, resourceKey) => {
+      const value = resource[resourceKey];
+      if (reserved.includes(resourceKey)) {
+        acc[resourceKey + '_'] = value;
+        delete resource[resourceKey];
       } else {
-        if (payload.total === 0) {
-          hash[pluralize(primaryModelClass.modelName)] = [];
-        }
-        resourceArray = [ payload ];
+        acc[resourceKey] = value;
       }
-    } else {
-      resourceArray = get(payload, 'entry').mapBy('resource');
-    }
+      return acc;
+    }, {});
+  },
+  /**
+   * Get a modelName from the resource that it can use to look up the appropriate model for that part of the payload.
+   * @protected
+   * @param {Object} resource
+   * @returns {String|null} The modelName of the model (null will skip the resource from being parsed to a model)
+   */
+  modelNameFromResource(payload) {
+    return pluralize(dasherize(payload.resourceType));
+  },
+  /**
+   * Maps resources returned in a FHIR payload to records as expected in a JSON-API document
+   * @protected
+   * @param {Array} resources
+   * @returns {Object} Object containing records
+   */
+  mapResourcesToRecords(resources) {
+    return resources.reduce((acc, resource) => {
+      resource = this.renameReservedProperties(resource);
 
-    Object.assign(hash, mapResourcesToRecordsHash(resourceArray));
+      const typeName = this.modelNameFromResource(resource);
+      if (typeName !== null) {
+        if (!Array.isArray(acc[typeName])) {
+          acc[typeName] = [];
+        }
 
+        acc[typeName].push(resource);
+      }
+      return acc;
+    }, {});
+  },
+  /**
+   * Normalize meta information from reponse
+   * @param {Object} payload
+   * @returns {Object} meta object of a JSON-API document
+   */
+  normalizeMeta(payload) {
+    let meta = {};
     if (payload.link) {
-      let meta = {};
-      payload.link.forEach(link => { meta[link.relation] = link.url; });
-      hash['meta']['pagination'] = meta;
+      meta['pagination'] = payload.link.reduce((acc, link) => {
+        acc[link.relation] = link.url;
+        return acc;
+      }, {});
     }
 
     if (payload.total) {
-      hash['meta']['total'] = payload.total;
+      meta['total'] = payload.total;
     }
+    return meta;
+  },
+
+  normalizeResponse(store, primaryModelClass, payload, id, requestType) {
+    let resourceArray = null;
+    let modelName = pluralize(primaryModelClass.modelName);
+
+    if (isEmpty(payload.entry)) {
+      // This is a query where nothing was returned.
+      // Create an empty array in the hash so that subsequent parsing doesn't complain that there are 0 expected objects
+      if (payload.total === 0) {
+        return this._super(store, primaryModelClass, { [modelName]: [] }, id, requestType);
+      } else {
+        resourceArray = [payload];
+      }
+    } else {
+      resourceArray = A(payload.entry).mapBy('resource');
+    }
+
+    let hash = this.mapResourcesToRecords(resourceArray);
+
+    if (payload.total === 0 && !hash.hasOwnProperty(modelName)) {
+      hash[modelName] = [];
+    }
+
+    hash.meta = this.normalizeMeta(payload);
 
     return this._super(store, primaryModelClass, hash, id, requestType);
   },
@@ -109,40 +121,67 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
       data: A()
     };
 
-    arrayHash.map((hash) => {
-      const resource = get(hash, 'resourceType'),
-        modelClass = store.modelFor(resource),
-        serializer = store.serializerFor(resource),
-        normalizedSerializer = serializer.normalize(modelClass, hash, prop),
-        data = get(normalizedSerializer, 'data');
+    arrayHash.map(hash => {
+      const resource = hash.resourceType;
+      const modelClass = store.modelFor(resource);
+      const serializer = store.serializerFor(resource);
+      const normalizedSerializer = serializer.normalize(modelClass, hash, prop);
 
-      get(documentHash, 'data').push(data);
+      documentHash.data.push(normalizedSerializer.data);
     });
 
     return documentHash;
   },
 
   pushPayload(store, payload) {
-    const transformedPayload = mapResourcesToRecordsHash([payload]);
+    const transformedPayload = this.mapResourcesToRecords([payload]);
     return this._super(store, transformedPayload);
   },
+  /**
+   * Returns the resource's relationships formatted as a JSON-API "relationships object".
+   * Refences with a literal reference should be transformed to JSON-API links
+   * @param {Object} modelClass
+   * @param {Object} resourceHash
+   */
+  extractRelationships(modelClass, resourceHash) {
+    const relationShips = this._super(modelClass, resourceHash);
 
-  extractRelationship(relationshipModelName, relationshipHash) {
-    if (isNone(relationshipHash)) {
-      return null;
-    }
-
-    if (typeOf(relationshipHash) === 'object') {
-      const id = get(relationshipHash, 'id');
-      if (isPresent(id)) {
-        set(relationshipHash, 'id', coerceId(id));
+    modelClass.eachRelationship((key, relationshipMeta) => {
+      if (relationshipMeta.options.async !== false) {
+        let relationShipHash = resourceHash[relationshipMeta.key];
+        const relationship = this.extractAsyncRelationship(
+          relationShipHash,
+          relationshipMeta.kind
+        );
+        if (relationship) {
+          relationShips[relationshipMeta.key] = relationship;
+        }
       }
-      return relationshipHash;
+    });
+    return relationShips;
+  },
+  /**
+   * @protected
+   * @param {*} relationShipHash
+   * @param {*} relationshipMeta
+   * @returns {Object|null}
+   */
+  extractAsyncRelationship(relationShipHash = {}, kind) {
+    let meta = {};
+    let links = {};
+    if (kind === 'belongsTo') {
+      if (relationShipHash.reference) {
+        links.related = relationShipHash.reference;
+        meta.display = relationShipHash.display;
+        return { links, meta };
+      }
     }
-
-    return {
-      id: this.extractId(relationshipHash),
-      type: relationshipModelName
-    };
+    return null;
+  },
+  extractRelationship(relationshipModelName, relationshipHash) {
+    return this._super(
+      relationshipModelName,
+      this.renameReservedProperties(relationshipHash)
+    );
   }
 });
