@@ -1,10 +1,10 @@
-import {A, isArray} from '@ember/array';
-import {guidFor} from '@ember/object/internals';
-import {set, get} from '@ember/object';
-import {capitalize, camelize, dasherize} from '@ember/string';
-import {isEmpty} from '@ember/utils';
+import { A } from '@ember/array';
+import { guidFor } from '@ember/object/internals';
+import { set, get } from '@ember/object';
+import { capitalize, camelize, dasherize } from '@ember/string';
+import { isEmpty } from '@ember/utils';
 import DS from 'ember-data';
-import {pluralize} from 'ember-inflector';
+import { pluralize } from 'ember-inflector';
 
 const reserved = ['data', 'container', 'trigger', 'type'];
 
@@ -97,7 +97,7 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
       // This is a query where nothing was returned.
       // Create an empty array in the hash so that subsequent parsing doesn't complain that there are 0 expected objects
       if (payload.total === 0) {
-        return this._super(store, primaryModelClass, {[modelName]: []}, id, requestType);
+        return this._super(store, primaryModelClass, { [modelName]: [] }, id, requestType);
       } else {
         resourceArray = [payload];
       }
@@ -139,26 +139,26 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
   },
   /**
    * Returns the resource's relationships formatted as a JSON-API "relationships object".
-   * References with a literal reference should be transformed to JSON-API links
+   * Refences with a literal reference should be transformed to JSON-API links
    * @param {Object} modelClass
    * @param {Object} resourceHash
    */
   extractRelationships(modelClass, resourceHash) {
-    const relationships = this._super(modelClass, resourceHash);
+    const relationShips = this._super(modelClass, resourceHash);
 
     modelClass.eachRelationship((key, relationshipMeta) => {
       if (relationshipMeta.options.async !== false) {
-        let relationshipHash = resourceHash[relationshipMeta.key];
+        let relationShipHash = resourceHash[relationshipMeta.key];
         const relationship = this.extractAsyncRelationship(
-          relationshipHash,
+          relationShipHash,
           relationshipMeta.kind
         );
         if (relationship) {
-          relationships[relationshipMeta.key] = relationship;
+          relationShips[relationshipMeta.key] = relationship;
         }
       }
     });
-    return relationships;
+    return relationShips;
   },
   /**
    * @protected
@@ -173,17 +173,7 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
       if (relationShipHash.reference) {
         links.related = relationShipHash.reference;
         meta.display = relationShipHash.display;
-        return {links, meta};
-      }
-    } else if (
-      kind === 'hasMany' &&
-      isArray(relationShipHash) &&
-      relationShipHash.length === 1
-    ) {
-      if (relationShipHash[0].reference) {
-        links.related = relationShipHash[0].reference;
-        meta.display = relationShipHash[0].display;
-        return {links, meta};
+        return { links, meta };
       }
     }
     return null;
