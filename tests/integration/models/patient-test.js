@@ -50,7 +50,7 @@ module('Integration | Model | Patient', function(hooks) {
 
       assert.equal(model.active, true);
       assert.equal(model.gender, 'male');
-      assert.deepEqual(model.birthDate.getDate(), 25),
+      assert.deepEqual(model.birthDate.getDate(), 25);
       assert.equal(model.deceasedBoolean, false);
       assert.equal(model.deceasedDateTime, null);
       assert.equal(model.multipleBirthBoolean, null);
