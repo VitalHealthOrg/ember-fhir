@@ -97,7 +97,13 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
       // This is a query where nothing was returned.
       // Create an empty array in the hash so that subsequent parsing doesn't complain that there are 0 expected objects
       if (payload.total === 0) {
-        return this._super(store, primaryModelClass, { [modelName]: [] }, id, requestType);
+        return this._super(
+          store,
+          primaryModelClass,
+          { [modelName]: [] },
+          id,
+          requestType
+        );
       } else {
         resourceArray = [payload];
       }
@@ -138,50 +144,21 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
     return this._super(store, transformedPayload);
   },
   /**
-   * Returns the resource's relationships formatted as a JSON-API "relationships object".
-   * Refences with a literal reference should be transformed to JSON-API links
-   * @param {Object} modelClass
-   * @param {Object} resourceHash
-   */
-  extractRelationships(modelClass, resourceHash) {
-    const relationShips = this._super(modelClass, resourceHash);
-
-    modelClass.eachRelationship((key, relationshipMeta) => {
-      if (relationshipMeta.options.async !== false) {
-        let relationShipHash = resourceHash[relationshipMeta.key];
-        const relationship = this.extractAsyncRelationship(
-          relationShipHash,
-          relationshipMeta.kind
-        );
-        if (relationship) {
-          relationShips[relationshipMeta.key] = relationship;
-        }
-      }
-    });
-    return relationShips;
-  },
-  /**
    * @protected
-   * @param {*} relationShipHash
-   * @param {*} relationshipMeta
-   * @returns {Object|null}
+   * Override the extraction of relationships to (conditionally) rename reserved keys 'data' and 'type' to 'data_' and type_'.
+   * @param {String} relationshipModelName
+   * @param {Object} relationshipHash
+   * @param {Boolean} renameReservedProperties
+   * @return {Object}
    */
-  extractAsyncRelationship(relationShipHash = {}, kind) {
-    let meta = {};
-    let links = {};
-    if (kind === 'belongsTo') {
-      if (relationShipHash.reference) {
-        links.related = relationShipHash.reference;
-        meta.display = relationShipHash.display;
-        return { links, meta };
-      }
-    }
-    return null;
-  },
-  extractRelationship(relationshipModelName, relationshipHash) {
-    return this._super(
-      relationshipModelName,
-      this.renameReservedProperties(relationshipHash)
-    );
+  extractRelationship(
+    relationshipModelName,
+    relationshipHash,
+    renameReservedProperties = true
+  ) {
+    const hash = renameReservedProperties
+      ? this.renameReservedProperties(relationshipHash)
+      : relationshipHash;
+    return this._super(relationshipModelName, hash);
   }
 });

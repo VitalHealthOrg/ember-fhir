@@ -64,23 +64,13 @@ module('Unit | Serializer | -fhir', function(hooks) {
       assert.equal(resultDocument.data.type, 'patient');
       assert.equal(resultDocument.data.attributes.active, true);
       assert.ok(Array.isArray(resultDocument.included));
-      assert.equal(resultDocument.included.length, 25);
+      assert.equal(resultDocument.included.length, 28);
 
       assert.equal(resultDocument.data.relationships.name.data.length, 3);
       assert.equal(
         resultDocument.data.relationships.name.data[0].type,
         'human-name'
       );
-
-      //Absolute references should work
-      assert.deepEqual(resultDocument.data.relationships.managingOrganization, {
-        links: {
-          related: 'http://vonk.fire.ly/Organization/1'
-        },
-        meta: {
-          display: 'Laboratoire de charme'
-        }
-      });
     });
 
     test('internal contained resources', async function(assert) {
