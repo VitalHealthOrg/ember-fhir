@@ -67,7 +67,7 @@ module('Integration | Model | Patient', function(hooks) {
     test('it maps references to JSON-API "relationships object"', function(assert) {
       const relationShip = model.relationshipFor('managingOrganization');
       assert.equal(relationShip.key, 'managingOrganization');
-      assert.equal(relationShip.type, 'organization');
+      assert.equal(relationShip.type, 'reference');
     });
   });
 });

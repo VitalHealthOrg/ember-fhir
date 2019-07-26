@@ -20,6 +20,10 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
     return hash;
   },
 
+  modelNameFromPayloadKey (key) {
+    return key;
+  },
+
   serializeIntoHash(hash, typeClass, snapshot, options) {
     Object.assign(hash, this.serialize(snapshot, options));
   },
@@ -46,7 +50,7 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
    * @returns {String|null} The modelName of the model (null will skip the resource from being parsed to a model)
    */
   modelNameFromResource(payload) {
-    return pluralize(dasherize(payload.resourceType));
+    return dasherize(payload.resourceType);
   },
   /**
    * Maps resources returned in a FHIR payload to records as expected in a JSON-API document

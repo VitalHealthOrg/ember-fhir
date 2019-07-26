@@ -4,8 +4,10 @@ import { run } from '@ember/runloop';
 import { example } from '../../stubs/patient';
 import { example as questionnaire } from '../../stubs/questionnaire';
 import { example as patient } from '../../stubs/patient';
+import { example as specimen } from '../../stubs/specimen';
 import Questionnaire from 'ember-fhir/models/questionnaire';
 import Patient from 'ember-fhir/models/patient';
+import Specimen from 'ember-fhir/models/specimen';
 
 import Service from '@ember/service';
 
@@ -48,6 +50,22 @@ module('Unit | Serializer | -fhir', function(hooks) {
     hooks.beforeEach(function() {
       store = this.owner.lookup('service:store');
     });
+
+    test('uses ResourceType as modelName', async function(assert) {
+      const serializer = store.serializerFor('specimen');
+      const resultDocument = serializer.normalizeResponse(
+        store,
+        Specimen,
+        specimen,
+        null,
+        'findRecord'
+      );
+
+      //Attributes and sync relations should still work
+      assert.equal(resultDocument.data.type, 'specimen');
+      assert.equal(resultDocument.data.id, '1');
+    });
+
 
     test('belongsTo references', async function(assert) {
       const serializer = store.serializerFor('Patient');
