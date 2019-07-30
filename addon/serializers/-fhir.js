@@ -21,7 +21,7 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
   },
 
   modelNameFromPayloadKey (key) {
-    return key;
+    return dasherize(key);
   },
 
   serializeIntoHash(hash, typeClass, snapshot, options) {
