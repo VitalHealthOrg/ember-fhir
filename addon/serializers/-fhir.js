@@ -4,7 +4,6 @@ import { set, get } from '@ember/object';
 import { capitalize, camelize, dasherize } from '@ember/string';
 import { isEmpty } from '@ember/utils';
 import DS from 'ember-data';
-import { pluralize } from 'ember-inflector';
 
 const reserved = ['data', 'container', 'trigger', 'type'];
 
@@ -95,7 +94,7 @@ export default DS.RESTSerializer.extend(DS.EmbeddedRecordsMixin, {
 
   normalizeResponse(store, primaryModelClass, payload, id, requestType) {
     let resourceArray = null;
-    let modelName = pluralize(primaryModelClass.modelName);
+    let modelName = primaryModelClass.modelName;
 
     if (isEmpty(payload.entry)) {
       // This is a query where nothing was returned.
